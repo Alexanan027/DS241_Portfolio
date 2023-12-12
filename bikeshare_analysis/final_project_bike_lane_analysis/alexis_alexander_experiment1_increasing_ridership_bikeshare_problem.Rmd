@@ -52,7 +52,6 @@ We are initially looking at the following three data sets:
 ```{r}
 bikes_september <- read_csv(here("data_raw","202309-capitalbikeshare-tripdata.csv")) %>% clean_names()
 bikes_lanes = st_read(here("data_raw", "Bicycle_Lanes.geojson")) %>% clean_names()
-bikes_crashes = st_read(here("data_raw", "Crashes_in_DC.geojson")) %>% clean_names()
 csv_bikes_lanes = read_csv(here("data_raw", "Bicycle_Lanes.csv")) %>% clean_names()
 csv_bikes_crashes = read_csv(here("data_raw", "Crashes_in_DC.csv")) %>% clean_names()
 dc_shape = st_read(here("data_raw","DC_Health_Planning_Neighborhoods.geojson")) %>% clean_names()
@@ -62,7 +61,6 @@ dc_shape = st_read(here("data_raw","DC_Health_Planning_Neighborhoods.geojson")) 
 
 ```{r}
 class(bikes_lanes)
-class(bikes_crashes)
 class(dc_shape)
 class(csv_bikes_crashes)
 class(csv_bikes_lanes)
