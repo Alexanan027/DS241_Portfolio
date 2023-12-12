@@ -1,0 +1,131 @@
+---
+title: "Experiment 3: More Airline Data"
+subtitle: "Asynchronous Lecture"
+date: "2023-09-10"
+output: html_notebook
+---
+Time Stamp: 32:00
+Alexis Alexander
+
+This experiment (concerptually) continues our class work on flight data. 
+
+We will continue to refer to (https://r4ds.hadley.nz/data-transform).
+
+**However, we will expand and update our dataset by going to a root source -- the Bureau of Transportation.
+
+Go to the website https://www.transtats.bts.gov/DL_SelectFields.aspx?gnoyr_VQ=FIM&QO_fu146_anzr=Nv4%20Pn44vr45. This dataset allows access to information on domestic flight and domestic carriers, with monthly summary data. 
+
+# Packages
+
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+library(janitor)
+library(here)
+```
+
+# Get data from the online source.
+
+Save the download to your data_raw directory. It will be a zipfile, but that will be OK.
+Don't change the name on the zipfile.
+
+## Load the BOT data 
+
+We take advantage of the here package to get the path to the file that we stored. We also may not that inside the zipfile is a csv file. We will read the csv file.
+
+```{r}
+thisfile=here("data_raw", "DL_SelectFields.zip")
+
+df2022=read_csv(thisfile) %>% clean_names()
+```
+## Subsetting to data of interest 
+
+Let's focus on flights from LGA and eliminate cargo flights by requiring at least 1 passenger. 
+
+Call the resultant dataframe 'df9'.
+
+```{r}
+df9=df2022 |> filter(passengers>0,origin=="LGA")
+```
+
+ # Exploring the BOT 2022 data
+ 
+ ## Subsetting to data of interest 
+ 
+ Lets try to visualize a monthly count of flights using a barchart.
+ 
+ First, a not quite right visualization 
+ 
+ aes - declare what is on the horizontal, and geometry is bar 
+ 
+```{r}
+df9 |>
+  ggplot(aes(month)) + geom_bar()
+```
+ This shows flights from everywhere out of LGA. The lines in tables are counting the number of departures in a month. Count the number of departures and not the number of rows. 
+ 
+ By default, geom_bar is countign the number of rows, where we have asked it to visualize the count by moth 
+ 
+ ** Take a look at the dattset and discover why counting rows is not going to give us a count of flights***
+ 
+ weight each row by a certain value, weigh each  row by the actual number of departures 
+  
+The visualization we want is: 
+
+```{r}
+df9 |> ggplot(aes(month)) + geom_bar(aes(weight=departures_performed))
+```
+Make some observations about this plot. 
+
+### A New Visualization 
+
+Can you make a boxplot where the bar height is based on the number of passengers riding each month?
+
+```{r}
+df9|> ggplot(aes(month)) + geom_bar(aes(weight=passengers))
+```
+
+Observation:
+* Low passenger numbers in early 2022 likely due to Covid
+* Flights may still have been affected by the pandemic 
+
+
+***Just Because You Can 
+
+```{r}
+df9 |>
+  ggplot(aes(month, fill=carrier_name)) + geom_bar(aes(weight=departures_performed))
+```
+
+## Arrivals and Departures from LGA
+
+```{r}
+df10=df2022 |> filter(passengers>0,origin=="LGA" | dest=="LGA")
+
+df10 |> ggplot(aes(month)) + geom_bar(aes(weight=passengers))
+```
+
+originally selecting by name but could select based on a subset of these variables
+```{r}
+df11=df10 |>
+  select(month,passengers,seats,carrier_name,dest,origin)
+```
+
+```{r}
+df12=df10 |> select(1:5, month, contains("id"))
+```
+
+How full was the airplane?
+Distribution of how full these airlines were
+```{r}
+df13=df11 |> mutate(percent_loading = passengers/seats*100)
+
+df13 |> 
+  ggplot(aes(percent_loading)) +
+  geom_histogram()+facet_wrap(~carrier_name, scales="free_y")
+```
+
+# Summarize the Data 
+
+

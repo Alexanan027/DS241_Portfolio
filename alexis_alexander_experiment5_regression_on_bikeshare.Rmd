@@ -1,0 +1,376 @@
+---
+title: "Homework 1"
+author: "Alexis Alexander"
+date: 'Due Date: 18 October 2023'
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cerulean
+    highlight: tango
+---
+
+##### Citation
+
+This homework assignment is largely borrowed from Coursework created Prof. Alexandra Chouldechova at Carnegie Mellon University.  I have modified slightly and am using in accordance with the Creative Commons License:
+
+ 
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License(http://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+##### This homework is due by **12:00AM 18 October 2023**.  
+
+##### To complete this assignment, follow these steps:
+
+1. Download the `homework1.Rmd` file from Moodle
+
+2. Open `homework1.Rmd` in RStudio.
+
+3. Replace the "Your Name Here" text in the `author:` field with your own name.
+
+4. Supply your solutions to the homework by editing `homework1.Rmd`.
+
+5. When you have completed the homework and have **checked** that your code both runs in the Console and knits correctly when you click `Knit HTML`, rename the R Markdown file to `homework1_YourNameHere.Rmd`, and submit both the `.Rmd` file and the `.html` output file on Blackboard.  (YourNameHere should be changed to your own name.)
+
+##### Homework tips:
+
+1. Recall the following useful RStudio hotkeys.
+
+Keystroke | Description
+------------|-------------------------------------------
+`<tab>` | Autocompletes commands and filenames, and lists arguments for functions.
+`<up>` | Cycles through previous commands in the console prompt
+`<ctrl-up>` | Lists history of previous commands matching an unfinished one
+`<ctrl-enter>` | Runs current line from source window to Console. Good for trying things out ideas from a source file.
+`<ESC>` | Aborts an unfinished command and get out of the + prompt
+
+**Note**: Shown above are the Windows/Linux keys.  For Mac OS X, the `<ctrl>` key should be substituted with the `<command>` (&#8984;) key.
+
+2. Instead of sending code line-by-line with `<ctrl-enter>`, you can send entire code chunks, and even run all of the code chunks in your .Rmd file. Look under the <Chunks> menu of the Source panel.
+
+3. Run your code in the Console and Knit HTML frequently to check for errors.
+
+4. You may find it easier to solve a problem by interacting only with the Console at first, or by creating a separate `.R` source file that contains only R code and no Markdown.
+
+### Housekeeping - packages to be used.
+
+We will give preference to the "tidyverse" of packages related to "Tidy Data."  
+
+
+```{r}
+library(knitr)
+library(tidyverse) # loads ggplot2, dplyr,tidyr,readr,purr,tibble
+
+library(broom)  # because I find it useful
+library(ggplot2)
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")  
+
+options(scipen = 4)  # make output prefer not to use scientific notation
+```
+
+### Introduction: Bikeshare data
+
+For this problem we'll be working with two years of bikeshare data from the Capital Bikeshare system in Washington DC.  The dataset contains daily bikeshare counts, along with daily measurements on environmental and seasonal information that may affect the bikesharing.  
+
+### Data pre-processing 
+
+Let's start by loading the data.
+
+```{r}
+bikes <- read.csv("http://www.andrew.cmu.edu/user/achoulde/95791/data/bikes.csv", header = TRUE)
+
+# Transform temp and atemp to degrees C instead of [0,1] scale
+# Transform humidity to %
+# Transform wind speed (multiply by 67, the normalizing value)
+
+bikes <- mutate(bikes,
+                   temp = 47 * temp - 8,
+                   atemp = 66 * atemp - 16,
+                   hum = 100 * hum,
+                   windspeed = 67 * windspeed)
+
+# The recode() command from the dplyr library allows us to easily
+# rename values in our variables.  Below we use this command to change season
+# from numeric codings to season names.
+
+bikes <- mutate(bikes, 
+                   season = recode(season, `1`="Winter",`2`="Spring",
+                                      `3`="Summer", `4`="Fall"))
+```
+
+Let's look at some boxplots of how bikeshare ride count varies with season.
+
+```{r, fig.height = 4, fig.width = 5} 
+qplot(data = bikes, x = season, y = cnt, fill = I(cbPalette[3]), geom = "boxplot")
+```
+
+There's something funny going on here.  Instead of showing up in seasonal order, the seasons in the plot are showing up in **alphabetical order**.  The following command reorders the seasons appropriately.
+
+```{r}
+bikes <- mutate(bikes, season = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")))
+```
+
+Now let's try that plot again.
+
+```{r, fig.height = 4, fig.width = 5} 
+qplot(data = bikes, x = season, y = cnt, fill = I(cbPalette[3]), geom = "boxplot")
+```
+
+Here's information on what the variables mean.
+
+  - instant: record index
+	- dteday : date
+	- season : season (1:Winter, 2:Spring, 3:Summer, 4:Fall)
+	- yr : year (0: 2011, 1:2012)
+	- mnth : month ( 1 to 12)
+	- hr : hour (0 to 23)
+	- holiday : weather day is holiday or not (extracted from http://dchr.dc.gov/page/holiday-schedule)
+	- weekday : day of the week
+	- workingday : if day is neither weekend nor holiday is 1, otherwise is 0.
+	+ weathersit : 
+		- 1: Clear, Few clouds, Partly cloudy, Partly cloudy
+		- 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist
+		- 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds
+		- 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog
+	- temp : Temperature in Celsius. 
+	- atemp: `feels like' temperature in Celsius. 
+	- hum: Normalized humidity. The values are divided to 100 (max)
+	- windspeed: Normalized wind speed. The values are divided to 67 (max)
+	- casual: count of casual users
+	- registered: count of registered users
+	- cnt: count of total rental bikes including both casual and registered
+
+### Problem 1: Qualitative predictors
+
+> The Season variable is an example of what's called a *qualitative* or *categorical* predictor.  In R, such variables are called `factors`.  This problems gets to fit a model with a qualitative predictor and to interpret the findings.
+
+
+##### **(a)** Suppose we were interested in predicting the count of total bike rentals by using the *season* as the predictor.  Fit a linear (using the lm command) regression model with `cnt` as the response and `season` as the input.  Use the `tidy()` and `kable()` commands to produce a nice looking coefficients table.
+
+(Maybe look at https://rstudio-pubs-static.s3.amazonaws.com/58870_136d938b1ffd427ab5b30a98b663b127.html  for an idea)
+
+```{r}
+lm_bikes = lm(cnt~season, data = bikes) # Create the linear regression
+summary(lm_bikes) # Review the linear regression 
+tidy(lm_bikes) # Create a tidied coefficients table
+```
+
+
+##### **(b)** How many total coefficients are there in the model?
+
+- There are 4 total coefficients in the model.
+    
+    
+##### **(c)** How many coefficients are estimated for the `season` variable?
+  
+- 1 coefficient is estimated for the 'season' variable. Each season has its own coefficient. 
+    
+##### **(d)** Interpret the coefficients of `season` in the model.
+   
+The following is the average count of total bike rentals across the different seasons:
+In Winter (the intercept point), there is an average of 2604.1 bike rentals.
+In Spring, there is an average of 4992.3 bike rentals (2604.1+2388.2).
+In Summer, there is an average of 5644.3 bike rentals (2604.1+3040.2).
+In Fall, there is an average of 4,728.1 bike rentals (2604.1+2124.0).
+The p values for all of the coefficients are significantly less than 0.05, which suggests that there is statistical evidence of a difference in bike rental count depending on the season. 
+
+<p> **Hint**: If you have not previously studied how to interpret qualitative variables in regressions, perhaps search on key terms 'lm', 'r', 'categorical predictor' 'interpreting'. </p>
+
+<hr>
+
+### Problem 2: Multiple linear regression
+
+> In this problem we'll practice fitting and interpreting the results of a multiple linear regression.
+
+##### **(a)** Fit a regression model with `cnt` as the response and the following variables as inputs: `temp`, `atemp`, `mnth`, `hum`, `windspeed`.  Produce a nice looking coefficients table.
+
+```{r}
+multiplelm_bikes = lm(cnt ~ temp + atemp + mnth + hum + windspeed, data = bikes) # Creating a multiple linear regression with the count of total bike rentals as the dependent variable and temperature, 'feels like' temp, month, humidity, and windspeed (weather conditions) as the independent variable 
+summary(multiplelm_bikes) # Review the multiple linear regression
+tidy(multiplelm_bikes) # Create a tidied coefficients tables 
+```
+
+##### **(b)** Interpret the coefficients of `temp`, `mnth` and `hum` in the model.
+
+- For the 'temp' coefficient, the average count of total bike rentals is approximately 5103. For the 'mnth' coefficient, the average count of total bike rentals is approximately 5130, whereas average for the 'hum' coefficient is approximately 5153. 
+    
+    
+##### **(c)** Which predictors are associated with increased ridership?  Which predictors are associated with decreased ridership?
+  
+- The 'temp', 'mnth', and 'hum' predictors are associated with increased ridership. The 'hum' and 'windspeed' predictors are associated with decreased ridership.
+    
+##### **(d)** Which predictors are statistically significant at the 0.05 level?
+   
+- The 'mnth', 'hum', and 'windspeed' predictors are very significant, suggesting that there is statistical evidence of a difference in average count of bike rentals depending on the month, humidity, or windspeed. In addition, the 'atemp' predictor is at the level of 0.05 as well, however its significance is not as great in comparison to the previously mentioned coefficients. 
+
+<hr>
+
+### Problem 3:  Dealing with collinearity 
+
+> As you probably already know from your most recent regression class, *collinear* or *highly correlated* predictors can make interpreting regression coefficients problematic.  In this problem you will try to diagnose and address collinearity issues in the data.
+
+##### **(a)** Use the `pairs()` function on the set of variables used in **Problem 2** to check if any of the predictor variables are highly correlated with one another.  Your pairs plot should have scatterplots above the diagonal, and correlations below the diagonal.
+
+```{r}
+colbikes = bikes %>%
+select("temp", "atemp", "mnth", "hum", "windspeed") # Selecting the set of variables that were used in Problem 2
+pairs(colbikes) # Using the pairs() function to see if any of the predictor variables are correlated to each other
+```
+```{r}
+round(cor(colbikes),3) # Rounding the values in the correlation matrix
+```
+Notes: Positive numbers = positive correlation and vice versa, closer the number between 1 or -1, the stronger the correlation 
+
+**Hint**: A complete example of how to use the `pairs()` command to construct such plots may be found here: [Pairs plot example](http://www.andrew.cmu.edu/user/achoulde/94842/lectures/lecture08/lecture08-94842.html#collinearity-and-pairs-plots)
+
+##### **(b)** Are any of the predictors highly correlated?  Are you surprised that these predictors are highly correlated, or can you think of a reason for why it makes sense that they should be correlated?
+
+- The 'temp' and 'atemp' predictors are highly correlated with correlation values of 0.992. I am not surprised that these predictors are highly correlated because these variables both relate to temperature and have similar values. Generally, the actual and "feels-like" temperature only differ by a few degrees. The 'atemp' typically takes into account the humidity as well. 
+
+##### **(c)** Refit your regression model, but this time **omit** the `temp` variable.  Display the coefficients table for this model.
+
+```{r}
+multiplelm_bikes2 = lm(cnt ~ atemp + mnth + hum + windspeed, data = bikes) # Creating a multiple linear regression with the count of total bike rentals as the dependent variable and temperature, 'feels like' temp, month, humidity, and windspeed (weather conditions) as the independent variable 
+summary(multiplelm_bikes2) # Review the multiple linear regression
+tidy(multiplelm_bikes2) # Create a tidied coefficients tables
+```
+
+
+### Investigating Collinearity Without the 'Temp' Term 
+```{r}
+colbikes2 = bikes %>%
+select("atemp", "mnth", "hum", "windspeed") # Selecting the set of variables that were used in Problem 2
+pairs(colbikes2) # Using the pairs() function to see if any of the predictor variables are correlated to each other
+```
+```{r}
+round(cor(colbikes2), 3) # Rounding the values in the correlation matrix
+```
+
+##### **(d)** What is the coefficient of `atemp` in this new model?  Is it very different from the `atemp` coefficient estimated in part **(b)**?  Is it statistically significant?  Explain your findings.
+
+- The coefficent of 'atemp' in this new model is 5295. This means that the average count of total bike rentals is 5295 when dependent on the "feel-like" temperature. The 'atemp' coefficient in part (b) was 5130. This new value is slighly higher than the original coefficient. The new 'atemp' predictor is statistically significant in this model, which suggests that there is evidence of a difference in total count of bike rentals depending on the feel-like temperature outside.
+
+# Optional Material Below
+
+### Problem 4: Exploring non-linearities
+
+> **Hint**: For this problem, you will find it useful to know about the `jitter` feature in graphics.  [Begin by reviewing the code at this link](http://www.andrew.cmu.edu/user/achoulde/94842/misc/extra_tips.html#jittering-points), and be sure to use what you feel to be an appropriate amount of jitter in your plots for **(a)**, **(b)** and **(c)**.  You **should not** use jitter for parts **(d)** onward.  
+
+##### **(a)** Using `ggplot2` graphics, construct a scatterplot of `cnt` (bikeshare count) across `mnth` (month of the year).  Describe what you see.  Does a linear relationship appear to be a good way of modeling how bikeshare count varies with month?  
+
+```{r}
+bikes_optional = bikes %>%
+  select(cnt, mnth) 
+  ggplot(data = bikes, aes(x = mnth, y = cnt, color = as.factor(mnth))) + geom_jitter() + guides(color = "none")
+```
+
+- In the scatterplot, the total count of bike rentals is plotted for the number of days in each month. The cnt variable increases during the Spring and Summer months in particular and decreases during the Winter months. Since not all of the data points follow a clear straight progression, it would not be useful to use a linear relationship to model the difference in bikeshare counts per month. 
+
+##### **(b)** Use `ggplot2`'s `stat_smooth()` overlays to try out *different degree polynomial fits* for modeling the relationship between `cnt` and `month`.  Display the lowest degree polynomial fit that appears to nicely capture the trends in the data.  Explain your choice.
+
+```{r}
+library ("ggplot2")
+
+# First try using stat_smooth using the example. With this try, the regression line does not change when I change the degree of the polynomial. 
+bikes_optional = bikes %>%
+  select(cnt, mnth)
+  ggplot(data = bikes, aes(x = mnth, y = cnt, color = as.factor(mnth))) + geom_jitter() + guides(color = FALSE) + 
+    stat_smooth(aes(group = 2))+
+    theme_bw()
+
+# Second attempt on using stat_smooth
+bikes_optional <- bikes %>%
+  select(cnt, mnth)
+  ggplot(data = bikes, aes(x = mnth, y = cnt, color = as.factor(mnth))) + geom_jitter() + guides(color = FALSE) +
+  stat_smooth(method = "lm", 
+              formula = cnt ~ poly(mnth,1)) +
+  theme_bw()
+```
+
+
+```{r}
+polybikes = lm(cnt~poly(mnth,2), data = bikes)
+summary(polybikes)
+
+plot(cnt ~ mnth, bikes) + 
+lines(sort(bikes$mnth), fitted(polybikes)[order(bikes$mnth)], color = "blue", type = "l")
+
+polybikes10 = lm(cnt~poly(mnth,10), data = bikes)
+summary(polybikes)
+
+plot(cnt ~ mnth, bikes) + 
+lines(sort(bikes$mnth), fitted(polybikes10)[order(bikes$mnth)], color = "blue", type = "l")
+```
+
+```{r}
+polybikes = lm(cnt ~ cut(mnth, breaks = c(-Inf,3,10,Inf)), data = bikes)
+summary(polybikes)
+
+plot(cnt ~ mnth, bikes) + 
+lines(sort(bikes$mnth), fitted(polybikes)[order(bikes$mnth)], color = "blue", type = "l")
+```
+
+- The lowest degree polynomial fit that clearly captures the graph is 2. When increasing the degree of the polynomial after 2, the line changes to be not smooth and does not accurately captures or take into account all of the data points.  
+
+
+##### **(c)** Use `ggplot2`'s `stat_smooth()` overlays to try out *different step functions* for modeling the relationship between `cnt` and `month`.  Display the model with the smallest number of "breaks" or "cuts" that nicely captures the trends in the data.  Explain your choice.  
+
+You may want to look at
+
+https://www.andrew.cmu.edu/user/achoulde/95791/lectures/code/week1.html
+
+to get some options.
+
+
+### The lines wont show when doing polynomial or stepwise function in ggplot
+```{r}
+bikes_optional = bikes %>%
+  select("cnt", "mnth")
+  qplot(data = bikes, x = mnth, y = cnt,  color = as.factor(mnth), geom = "jitter") +
+    guides(color = FALSE) +
+    stat_smooth(method = "lm", formula = cnt ~ cut(mnth, breaks = c(-Inf,3,10,Inf))) +
+    theme_bw()
+```
+
+- Optional Material
+
+##### Which do you think better describes the relationship between `cnt` and `mnth`: Polynomials, or Step Functions?  Explain your answer.
+
+- Optional Material
+
+##### **(d)**  Repeat parts **(a)** and **(b)** to determine appropriate degree polynomials for modeling the relationship between `cnt` and the other inputs: `atemp`, `hum` and `windspeed`.  Summarize your choices.  (Note: your polynomials can have different degrees for different inputs.)
+
+
+```{r}
+bikes_optional = bikes %>%
+   select(cnt, atemp, hum, windspeed)
+  ggplot(data = bikes, aes(x = atemp, y = cnt, color = as.factor(atemp))) + geom_point() + guides(color = FALSE) + 
+    ggtitle("Total Number of Bikeshares Depending on Atemp") +
+    geom_smooth(aes(group = 3)) +
+    theme_bw()
+   
+  ggplot(data = bikes, aes(x = (hum), y = cnt, color = as.factor(hum))) + geom_point() + guides(color = FALSE) + 
+    ggtitle("Total Number of Bikeshares Depending on Humidity") +
+    stat_smooth(aes(group = 8))+
+    theme_bw()
+  
+ ggplot(data = bikes, aes(x = (windspeed), y = cnt, color = as.factor(windspeed))) + geom_point() + guides(color = FALSE) + 
+    ggtitle("Total Number of Bikeshares Depending on Windspeed") +
+    stat_smooth(aes(group = 5))+
+    theme_bw()
+
+```
+
+- Optional Material
+
+##### **(e)** Use your answers to parts **(b)** and **(d)** to fit a polynomial regression model that regresses `cnt` on polynomials in the input variables: `atemp`, `mnth`, `hum`, and `windspeed`. How does the R-squared of this model compare to the R-squared of the model you fit in Problem 3(d)?  
+
+```{r}
+# Optional Material
+```
+
+- Optional Material
+
+##### **(f)** What is the total number of parameters in the model you fit in part **(e)**?  How does this compare to the number of parameters in the model fit in Problem 3(d)?
+
+- Optional Material 

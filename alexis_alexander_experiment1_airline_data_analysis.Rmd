@@ -1,0 +1,100 @@
+---
+title: "Experiment 1: Airline Data Analysis"
+date: "2023-09-06"
+output: html_notebook
+---
+Alexis Alexander
+
+We are loosely following Chapter 4 of R for Data Science and working with the nycflights dataset. Follow this link to the chapter: https://r4ds.hadley.nz/data-transform
+
+Make sure that the following packages are install:
+1. nycflights13
+2. tidyverse
+3. here
+
+Here we are loading the nycflight data and looking inside the data. We want to set df1 to to data for all flights.
+
+```{r}
+library(nycflights13)
+library(tidyverse)
+library(here)
+ df1 = (flights)
+ glimpse(flights)
+```
+
+We want to set df2 to all flights from Miami in September.
+```{r}
+df2 = df1|> filter (month == 9, origin == "MIA")
+```
+
+Next, we want to set df3 to all flights in September going to Miami.
+
+```{r}
+ df3 = df1|>
+  filter(month==9,dest == "MIA")
+```
+
+Next, we want df4 to be equal to flights in January going to Miami.
+```{r}
+df4 = df1|>
+  filter(month==1,dest == "MIA")
+```
+
+Now, we want df5 to be all flights in summer going to Chicago.
+```{r}
+df5 = df1|> filter(between(month,06,08), dest == "ORD")
+```
+
+
+Next, we are finding the unique flight numbers for flights to Miami in September. 
+```{r}
+df_flight_num=df3 |>
+  distinct(flight) |>
+  arrange(flight)
+```
+
+We are pulling up a table to look at a list of the unique flight numbers.
+```{r}
+head(df_flight_num)
+```
+
+We created a dataframe df6 composed of flights to Miami with a flight number matching the smallest flight number from the using the set above. We found that the smallest flight number to be 83.   
+```{r}
+df6=df1%>% filter(flight==83)
+```
+
+We created a visualization (using ggplot) to show the DELAYS associated with the lowest flight number (83). 
+```{r}
+df6 |> 
+  ggplot(aes(x=dep_delay, y = arr_delay))+geom_point()
+```
+By looking at the plot created, we noticed that some of the data was removed from the visual due to missing values. In addition, we saw that some of the flight data were negative meaning that some flights had a early departure.
+
+Here we are looking into the df6 data.
+```{r}
+view(df6)
+```
+
+Here we are creating another visualization that helps to better understand the relationship between the arrival delay and the departure delay. To improve upon the previous plot, we are attempting to remove the overplotting by using the "jitter" function. With the new plot, the distribution of the data is much clearer and a significant portion of the flights can be seen to fall into the negative range than previously seen.
+```{r}
+df6 |>
+  ggplot(aes(x = dep_delay, y = arr_delay)) + 
+  geom_jitter(width = 30, height = 30)
+```
+An observation that we would like to explore more is what is the difference between flights that fall into ranges of (-dep_delay,-arr_delay) and points with coordinates of (-dep_delay, arr_delay) or vice versa? Why does the majority of the flight data fall into the negative range? Are flights that are exactly on time fall on the (0,0) position?
+
+Extra credit: We assumed that a negative value for departure delay representaed an "early departure." To verify this assumption, we found a source that confirms this: https://www.sciencedirect.com/science/article/pii/S2046043022000119
+
+Citation: 
+
+Article Title: Flight delay causality: Machine learning technique in conjunction with random parameter statistical analysis
+Authors: Seyedmirsajad Mokhtarimousavi, Armin Mehrabi
+International Journal of Transportation Science and Technology,
+Volume 12, Issue 1,
+2023,
+Pages 230-244,
+ISSN 2046-0430,
+doi:https://doi.org/10.1016/j.ijtst.2022.01.007
+
+In particular the literature states, "Depature delay is the difference between scheduled and actual depature times in minutes in which the early depatures were shown in negative numbers in the dataset and considered to be an early depature."  
+

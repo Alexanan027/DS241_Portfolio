@@ -1,0 +1,293 @@
+---
+title: "Lab 04 - La Quinta is Spanish for next to Denny's, Pt. 1"
+author: "Alexis Alexander"
+date: "13 October 2023"
+output: html_notebook
+---
+
+For this dataset,  we are focusing on the geospatial location of La Quinta and Denny's chains within the U.S.
+
+
+### Load Packages
+
+```{r load-packages, message = FALSE}
+
+library(tidyverse) 
+library(here)
+library(janitor)
+
+```
+
+
+### Load the States, Dennys, and La Quinta Data Files
+
+```{r load-data, message = FALSE}
+
+statesfile = here("data_raw", "states.csv")
+dennysfile = here("data_raw", "dennys.csv")
+laquintafile = here("data_raw", "laquinta.csv")
+states=read_csv(statesfile)
+dennys=read_csv(dennysfile)
+laquinta=read_csv(laquintafile)
+
+```
+
+### Exercise 1 - Dimensions of the Denny's Data Set 
+
+```{r}
+
+nrow(dennys)
+ncol(dennys)
+
+```
+
+In the Denny's data set, there are 1,643 rows and 6 columns. Each row in the dataset represents a different Denny's location across the U.S. The variables (the columns) are the address, city, state, zip code, longitude and latitude coordinates. 
+
+
+### Exercise 2 - Dimensions of the La Quinta's Dataset
+
+```{r}
+
+nrow(laquinta)
+ncol(laquinta)
+
+```
+
+In the La Quinta's data set, there are 909 rows and 6 columns. Each row in the dataset represents a different La Quinta's location across the U.S. The variables (the columns) are the address, city, state, zip code, longitude and latitude coordinates. 
+
+### Exercise 3 - La Quinta and Denny's Locations Outside of the U.S
+
+There does exist La Quinta locations ouside of the U.S. These La Quintas are in the following additional countries: Canada, Mexico, China, New Zealand, Turkey, United Arab Emirates, Chile, Colombia, and Ecuador.
+
+
+There does exist Denny's locations ouside of the U.S. These restaurants are in the following additional countries: Canada, Mexico, Philippines, New Zealand, Honduras, the United Arab Emirates, Costa Rica, Guatemala, El Salvador, Indonesia, and the United Kingdom. 
+
+### Exercise 4 - How to Use Data to Find Establishments Outside of the U.S
+
+To determine where an establishment has any locations outside the US the longitude and latitude coordinates can be used to filter out any locations outside of the U.s boundaries.
+
+
+### Exercise 5 - Determine If Establishment Has Locations Outside of the US
+
+```{r}
+
+df1 = dennys %>%
+  filter(!(state %in% states$abbreviation))
+
+```
+
+There are 0 Denny's Location Outside of the US in this dataset.
+
+
+### Exercise 6 - Added the US filter to the Denny's Data to Find Locations Outside of the U.S
+
+```{r}
+
+df1 = dennys %>%
+  mutate(country = "United States")
+  
+```
+
+
+### Exercise 7 - Find La Quinta Locations That are Outside of the US
+
+```{r}
+
+df2_lq = laquinta %>%
+  filter(!(state %in% states$abbreviation))
+  count(df2_lq)
+  
+```
+
+There are 14 La Quinta locations outside of the U.S. These locations include Mexico, Colombia, Canada, and Honduras. 
+
+
+### Exercise 8 - Adding a Country Variable to the La Quinta Dataset 
+
+```{r}
+
+df2_lq = laquinta %>%
+  mutate(country = case_when(
+    state %in% state.abb     ~ "United States",
+    state %in% c("ON", "BC") ~ "Canada",
+    state == "ANT"           ~ "Colombia",
+    state %in% c("AG", "QR", "CH", "NL", "VE", "PU", "SL") ~ "Mexico",
+    state == "FM"            ~ "Honduras"
+  ))
+```
+
+Added the country varaible to all La Quinta locations that are located outside of the US. 
+
+## Filtering Out the Non-US Based La Quinta Locations 
+
+```{r}
+
+df3_lq  = df2_lq %>%
+  filter(country == "United States")
+
+```
+
+df2_lq is all of the La Quinta locations in the World from this dataset. df3_lq is only the La Quinta locations in the U.S.
+
+### Exercise 9 - Highest and Lowest Number of Dennys Locations Within the US
+
+## La Quinta Locations
+
+Counting the number of locations in each state, and then finding the minimum and maximum number of locations "n".
+
+```{r} 
+
+df3_lq1 = df3_lq %>%
+  count(state)
+  max(df3_lq1$n)
+  min(df3_lq1$n)
+
+```
+Filtering the max and min from the dataset to see which states corresponds to the value. 
+
+```{r}
+
+df3_lq1 |>
+  filter( n == "237" | n == "1")
+
+```
+
+For La Quinta hotels, Texas has the most locations whereas, Maine has the fewest. 
+
+## Denny's Locations 
+
+Counting the number of locations in each state, and then finding the minimum and maximum number of locations "n".
+
+df1 is the Denny's location with the US with the additional variable/label added.
+
+```{r}
+
+df1_max_min = df1 %>%
+  count(state)
+  max(df1_max_min$n)
+  min(df1_max_min$n)
+
+```
+Filtering the max and min from the dataset to see which states corresponds to the value.
+
+```{r}
+
+df1_max_min |> 
+  filter( n =="403" | n == "1")
+
+```
+
+For Denny's restaurants, California has the most locations whereas, Delaware has the fewest. 
+
+I believe these results from the data set is not surprising because more La Quinta and Denny's establishments would be located in heavily populated areas and less in smaller areas. For examples, Texas and California is densely populated in comparison to Maine and Delaware.  
+
+## Joining the Data Frame from the States.csv to Denny's and La Quinta's Data
+
+# Denny's Combination
+
+```{r}
+
+dennys_n_area = dennys %>%
+  count(state) %>%
+  inner_join(states, by = c("state" = "abbreviation"))
+
+```
+
+# La Quinta's Combination 
+
+```{r}
+
+df3_lq_n_area = df3_lq %>%
+  count(state) %>%
+  inner_join(states, by = c("state" = "abbreviation"))
+
+```
+
+### Exercise 10 - Most and Least Locations Per Thousand Square Miles (Denny's and La Quinta)
+
+## For Denny's
+
+```{r}
+
+dennys_perarea = dennys_n_area %>%
+  select(n, area, state) %>%
+  mutate(per_area = n / area)
+  head(dennys_perarea)
+  
+```
+
+## Finding Which States has the Most and Least Denny's Locations Per Thousand Square Miles 
+
+```{r}
+
+dennys_perarea %>%
+  select(state, per_area)
+  max(dennys_perarea$per_area)
+  min(dennys_perarea$per_area)
+
+```
+
+DC has the most Denny's locations per thousand square miles, whereas Arkansas has the fewest.
+
+## For La Quinta's
+
+```{r}
+
+laquinta_perarea = df3_lq_n_area %>%
+  select(state, n ,area) %>%
+  mutate(per_area = n/area)
+  head(laquinta_perarea)
+
+```
+
+## Finding Which States has the Most and Least Denny's Locations Per Thousand Square Miles 
+
+```{r}
+
+laquinta_perarea %>%
+  select(state, per_area)
+  max(laquinta_perarea$per_area)
+  min(laquinta_perarea$per_area)
+  
+
+```
+
+Arkansas has the least number of La Quinta's locations whereas, Rhode Island has the most.  
+
+
+## Binding the La Quinta's and Denny's Data into One Dataset 
+
+```{r}
+
+dennys_10 <- dennys %>%
+  mutate(establishment = "Denny's")
+laquinta_10 <- df3_lq %>%
+  mutate(establishment = "La Quinta")
+dn_lq <- bind_rows(dennys_10, laquinta_10)
+ggplot(dn_lq, mapping = aes(x = longitude, y = latitude, color = establishment)) +
+  geom_point()
+
+```
+
+### Exercise 11 - Filter the Data for Oberservatiosn in North Carolina Only 
+
+```{r}
+dn_lq_NC = dn_lq |>
+  filter(state == "NC")
+ggplot(dn_lq_NC, mapping = aes(x = longitude, y = latitude, color = establishment)) + geom_point(alpha = 0.7)
+
+```
+
+Visually, Mitch Hedberg's job does not appear to hold because there are plenty of Denny's resturants without La Quinta next to them. 
+
+### Exercise 12 - Filter the Data for Observatiosn in Texas Only 
+
+```{r}
+
+dn_lq_TX = dn_lq |>
+  filter(state == "TX")
+ggplot(dn_lq_TX, mapping = aes(x = longitude, y = latitude, color = establishment)) + geom_point(alpha = 0.5) 
+
+```
+
+Visually, Mitch Hedberg's job does appear to hold because each establishment is clustered in the same place. 
