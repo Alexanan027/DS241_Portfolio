@@ -1,0 +1,163 @@
+---
+title: "Bikeshare: Meta file"
+author: Alexis Alexander
+output: html_notebook
+---
+
+We're just looking at September 2023 for right now. we want to know at a specific instance in time, how many riders there are? Now obviously the amount of people riding will be different for every day, so I think we may be looking for an average only.
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(here)
+library(openmeteo)
+
+rm(list = ls())
+
+bikes <- read_csv("data_raw/202309-capitalbikeshare-tripdata.csv", show_col_types = FALSE) %>% clean_names()
+DCWeather<- weather_history(c(38.9072, 77.0369), start= "2023-09-01", end= "2023-09-30", hourly = c("apparent_temperature", "windspeed_10m", "precipitation", "rain"))
+
+ggplot(data = bikes, mapping = aes(x = start_lng, y = start_lat)) +geom_point()
+```
+# Plots Defaults
+For consistency:
+
+```{r}
+theme_set(theme_minimal())
+```
+
+
+for every start time there is +1, end time is -1, and then create a cumlative sum on the rider column 
+
+# Rider vs. Time
+
+To track active riders over time, we'll break each observation into 
+
+* "ride start", which increases active riders by one
+* "ride end", which decreases active riders by one 
+
+Starting to manipulate the data using a small data set 
+
+```{r}
+bikes_in_time = bikes |>
+ # slice_head(n=100) |>
+  pivot_longer(
+    cols = c(started_at, ended_at),
+    names_to = "start_end",
+    values_to = "t") |>
+  arrange(t) |>
+  mutate(rider_delta = (start_end == "started_at")*2-1) |> # Results in +/- 1 
+  mutate(riders=cumsum(rider_delta)) |>
+  relocate(t, start_end, riders, .after = rideable_type)
+```
+
+
+### EDA Plots of Ridership 
+
+### Full Month 
+
+```{r}
+bikes_in_time %>%
+   # slice_sample(prop = .01) |> # Removing some of the data on the plot 
+  ggplot(aes(t,riders)) +
+  geom_line() +
+  ggtitle("Riders in September")
+```
+
+### Filtering for One Day
+
+```{r}
+bikes_in_time %>%
+  filter(day(t) == 18) %>%
+  ggplot(aes(t,riders)) +
+  geom_line() +
+  ggtitle("Riders on 18 Sep")
+```
+
+### Splitting the Graph from Day 1 to Day 30 
+
+```{r}
+bikes_in_time %>%
+  filter(month(t) == 9) %>%
+  ggplot(aes(t,riders)) +
+  geom_line() +
+  facet_wrap(~mday(t), scales = "free_x", ncol=7) +
+  ggtitle("Riders by the Day of Month")
+```
+
+### Looking at the Weekday 
+
+```{r}
+bikes_in_time %>%
+  filter(month(t) == 9) %>%
+  mutate(epi=epiweek(t), wd=wday(t,label=TRUE, week_start = 7)) %>%
+  ggplot(aes(hms::as_hms(t), riders,color=as.factor(epi))) +
+  geom_line(alpha = 0.7) + 
+  facet_wrap(~wd, scales = "free_x", ncol=7)
+  ggtitle("Riders in September Based on Weekday")
+```
+
+### Is the pattern similar between electric and classic bikes?
+
+We will need to recompute the cumsum by group (in addition to overall): - A cumlative sum by group 
+
+```{r}
+bikes_type = bikes_in_time %>%
+  mutate(type_riders=cumsum(rider_delta), .by=rideable_type) %>%
+  relocate(type_riders,.after=riders)
+```
+
+```{r}
+bikes_type %>% 
+  filter(month(t)==9) %>%
+  ggplot(aes(t,type_riders,color=rideable_type))+
+  geom_line()+
+  facet_wrap(~mday(t), scales = "free_x", ncol=7)
+```
+
+
+### Computing bikers by groups
+
+```{r}
+df2s=bikes %>% 
+  select(rideable_type,member_casual,
+                	contains("start"),ride_id)%>% 
+  mutate(start_stop="start")%>%
+  rename(t=started_at,
+     	station_name=start_station_name,
+     	station_id=start_station_id,
+     	lat=start_lat,
+     	lng=start_lng)
+
+df2e=bikes %>%
+select(ride_id,rideable_type,member_casual,
+                	contains("end")) %>%
+  mutate(start_stop="stop") %>%
+  rename(t=ended_at,
+     	station_name=end_station_name,
+     	station_id=end_station_id,
+     	lat=end_lat,
+     	lng=end_lng)
+
+df2 = bind_rows(df2s, df2e)
+```
+
+
+
+```{r}
+startBikes = bikes |> 
+  select(rideable_type, member_casual, contains("start"), ride_id) |>
+  mutate(start_stop = "start") |>
+  rename(t = started_at, station_name = start_station_name, station_id = start_station_id, lat = start_lat, lng = start_lng)
+
+endBikes = bikes |> 
+  select(rideable_type, member_casual, contains("end"), ride_id) |>
+  mutate(start_stop = "stop") |> ##making new variable so we know what this data is when we merge
+  rename(t = ended_at, station_name = end_station_name, station_id = end_station_id, lat = end_lat, lng = end_lng)
+
+distanceBiked = bind_rows(startBikes, endBikes)
+
+```
+
+### For weather we will use a different file

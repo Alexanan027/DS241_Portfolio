@@ -1,0 +1,287 @@
+---
+title: "EXPERIMENT 4_bikeshare data "
+subtitle: "Effect of rain in ridership"
+author: "Alexis Alexander"
+date: "2023-11-03"
+output: html_notebook
+  toc: yes
+---
+This experiment seeks to understand how rain impacts the characteristics of riders. Potential area of investigation:
+
+Does rain affect:
+* How many people ride
+* How long they ride
+* How far they ride
+* Where they ride
+
+# Data Packages 
+
+Baseline packages for our analysis
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(here)
+library(openmeteo)
+```
+
+
+# Loading the Bikeshare Raw Data
+```{r}
+df1 <- read_csv("data_raw/202309-capitalbikeshare-tripdata.csv", show_col_types = FALSE) %>% clean_names()
+```
+
+# Creating Dataframe 2 - Interjoing 
+```{r}
+df2s=df1 %>% 
+  select(rideable_type,member_casual,
+                	contains("start"),ride_id)%>% 
+  mutate(start_stop="start")%>%
+  rename(t=started_at,
+     	station_name=start_station_name,
+     	station_id=start_station_id,
+     	lat=start_lat,
+     	lng=start_lng)
+
+df2e=df1 %>%
+select(ride_id,rideable_type,member_casual,
+                	contains("end")) %>%
+  mutate(start_stop="stop") %>%
+  rename(t=ended_at,
+     	station_name=end_station_name,
+     	station_id=end_station_id,
+     	lat=end_lat,
+     	lng=end_lng)
+
+df2=bind_rows(df2s,df2e) %>%
+  arrange(t) %>%
+  mutate(rider_delta=(start_stop=="start")*2-1) %>% #change in ridership 
+  mutate(riders=cumsum(rider_delta)) %>%
+  relocate(riders,.after=t)
+
+```
+
+# Plotting the Dataframe
+
+```{r}
+df2 %>% 
+  ggplot(aes(t,riders)) +
+  geom_line()
+```
+# Creating a subsampled dataset 
+
+```{r}
+df_s=df2 %>% slice_head(n=1000)
+
+```
+
+Why looking at slicing to every one hundredth data point will be bad? - Will likely track features however will jump data points whether the data is sparse or not. Want the data to be equally spaced in time.
+
+Starting with 100 rows to get the calculation right and then see if oyu can do it with a bigger data set. 
+Data stored in number of seconds based on a reference point
+
+
+Round down to the nearest 10 mins, relocate t_f next to t, and filter the data points by t_f
+
+```{r}
+df_e=df_s |>
+  mutate(t_f=floor_date(t, "10 mins")) %>%
+   relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+```
+
+
+# Applying to Previous Manipulations to the Entire Data Set 
+```{r}
+df_r=df2 |>
+  mutate(t_f=floor_date(t,"10 mins")) %>%
+  relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+```
+
+ 
+# Creating the Associated Plot 
+```{r}
+
+p1=df2 %>% 
+  filter(day(t)==18) %>%
+  ggplot(aes(x=t, y=riders)) +
+  geom_line() +
+  ggtitle("Riders on 18Sep")
+
+p1+
+  geom_line(data=df_r %>% filter(day(t)==18),
+  color="red")
+
+```
+ 
+
+```{r}
+df_r=df2 |>
+  mutate(t_f=floor_date(t,"1 mins")) %>%
+  relocate(t_f,.after=t) %>%
+  slice_head(n=1,by=t_f)
+
+```
+
+
+```{r}
+p1=df2 %>% 
+  filter(day(t)==18) %>%
+  ggplot(aes(x=t, y=riders)) +
+  geom_line() +
+  ggtitle("Riders on 18Sep")
+
+p1+
+  geom_line(data=df_r %>% filter(day(t)==18),
+  color="red")
+```
+
+% Get Weather Data
+```{r}
+df_w=weather_history("Washington",
+                	start = "2023-09-01",
+                	end = "2023-09-30",
+                	hourly = c("apparent_temperature",
+                           	"wind_speed_10m",
+                           	"precipitation")
+)
+
+```
+# Merging bike and weather data
+
+```{r}
+df_s=df2 %>% slice_sample(n=1000)
+df_j=df_s %>% left_join(df_w,
+                     	by=join_by(closest(t>=datetime)))
+```
+
+
+```{r}
+df_j=df_s %>% 
+   left_join(df_w,by=join_by(closest(t>=datetime)))  %>%
+   relocate(datetime, .after=t)
+ 
+head(df_j)
+```
+
+## Investigating the Time Zone Mismatch Between the Bikeshare and Weather Datasets 
+
+```{r}
+df_j$t[1:5]
+df_j$datetime[1:5]
+
+```
+
+```{r}
+Sys.timezone()
+```
+
+```{r}
+df_s_est <- force_tz(df_s, tzone = "America/New_York")
+```
+
+
+```{r}
+df_j_est=df_s_est %>% 
+   left_join(df_w,by=join_by(closest(t>=datetime)))  %>%
+   relocate(datetime, .after=t)
+ 
+head(df_j_est)
+```
+
+```{r}
+df_j_est$t[1:5]
+df_j_est$datetime[1:5]
+```
+```{r}
+df2$t[1:5]
+force_tz(df2$t[1:5],"America/New_York")
+```
+
+```{r}
+df2c=df2 %>% mutate(t=force_tz(t,tzone="America/New_York")) #corrected
+ 
+df_s2=df2c %>% slice_sample(n=1000)
+ 
+df_j2=df_s2 %>% 
+   left_join(df_w,by=join_by(closest(t>=datetime)))  %>%
+   relocate(datetime, .after=t)
+ 
+head(df_j2)
+
+```
+
+```{r}
+dfc=df2c %>% 
+  left_join(df_w,by=join_by(closest(t>=datetime))) %>%
+   relocate(datetime, .after=t) %>%
+  rename(atemp=hourly_apparent_temperature,
+         wind=hourly_wind_speed_10m,
+         prec=hourly_precipitation)
+```
+
+
+## A Visualization of the Data
+
+Coloring when the rain is greater than 1- color each point based on whether it was raining or not 
+
+```{r}
+p2=dfc %>%
+  ggplot(aes(x=t,y=riders,color=prec>1)) +
+  geom_point()
+p2
+  
+```
+
+
+```{r}
+p3 = dfc %>%
+  filter(day(t)==23) %>%
+  ggplot(aes(t,riders,color=wind,
+             shape=rideable_type,
+             size=member_casual))+
+  geom_point() +
+  ggtitle("Riders vs. Precipitation on Sep 23")
+
+p3
+
+```
+
+
+```{r}
+plotly::ggplotly(p3)
+```
+
+subtract the start and stop time to find the duration - between 2 date times
+work with df1 with the initial data - 450000 rows with the start and end times 
+call the variable ride_time with a histogram 
+
+```{r}
+df1_duration = df1 |>
+  mutate(ride_time = ended_at-started_at)
+
+df1_duration %>%
+ggplot(aes(ride_time))+
+  geom_histogram()
+
+```
+
+```{r}
+df1_duration_c = df1_duration |>
+  filter(ride_time >="60 sec" & ride_time <= "18000 sec")
+
+```
+
+Minimum and maximum cutoffs, bike became unusual during that time 
+ignore anything greater than a 5 hour bike ride 
+Filter away the extremely short and long rides and then redo the histogram 
+
+```{r}
+
+```
+
+
+
+
+
